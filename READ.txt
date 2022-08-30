@@ -1,0 +1,30 @@
+
+To compile this program you need Visual Studio and the C++ development tools installed.
+
+Make sure to install Visual Studio in the "Program Files (x86)" directory.
+
+Once you have done that you can navigate to this directory and launch "command prompt".
+
+This creates a command prompt which you can use to run the compilation command to turn our code into an executable. 
+
+To compile our program you can type (without the quotes)
+
+"win_compile.bat"
+
+You'll see some output, and assuming there were no errors you can now type
+
+"build\game.exe"
+
+Every time you create any change to the code you need to recompile the program, so I recommend keeping the command prompt open during a session so you can easily run "win_compile.bat"
+
+Think of the compiler as the user-interface between the programmer (you) and the machine. Whenever you compile your program it'll notify you if there are any errors, pointing out where they are so you can go fix them.
+
+
+If the game runs very slowly you may not be using your graphics card. Right click the "game.exe" and select "run with graphics processor" and choose the graphics card instead of the "integrated graphics" which is sometimes the default on laptops.
+
+
+If you're using the Mosaic features then look in src/mosaic.cpp. See at the top there is a list of #defines. You can toggle those between 1 and 0 to compile certain example games. Make sure everything is set to 0 except for the game you want to compile.
+
+If you want to make your own game, simply set all of them to 0, and include your own file that has a
+
+MyMosaicInit() function and a MyMosaicUpdate() function (see src/examples/mosaic_clean.cpp for an example of these).
