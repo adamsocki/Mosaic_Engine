@@ -59,46 +59,42 @@
 //EntityManager *em = NULL;
 
 enum EntityType {
-	EntityType_Player
+	EntityType_Player,
+	EntityType_Count   
+};
+
+struct EntityTypeBuffer {
+	int32 count;
+	int32 entitySize;
+	int32 capacity;
+	void* entities;
 };
 
 struct EntityManager {
-
+	EntityTypeBuffer buffers[EntityType_Count];
 };
-
 
 struct MyData {
 	Sprite sprite;
-
 };
 
-
 MyData* Data = NULL;
-
+EntityManager* em = NULL;
 
 void MyInit() {
-	//EntityHandle playerHandle = AddEntity(em, EntityType_Player);
 	Game->myData = malloc(sizeof(MyData));
 	memset(Game->myData, 0, sizeof(MyData));
 
 	Data = (MyData*)Game->myData;
 	LoadSprite(&Data->sprite, "data/player_guy.png");
+	
 }
 
-
-
 void MyGameUpdate() {
-	
-
 	// LOGIC
-	
-	
 	
 	// RENDER
 	ClearColor(RGB(0.4f, 0.0f, 0.0f));
-
-	
-
 	DrawSprite(V2(0), V2(0.3f,0.3f), &Data->sprite);
 }
 
