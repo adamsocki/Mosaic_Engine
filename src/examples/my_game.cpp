@@ -1,137 +1,227 @@
+#include "my_game_input.cpp"
+
 enum EntityType {
 	EntityType_Player,
 	EntityType_Enemy,
+	
+	EntityType_PlayerBullet,
 
-	EntityType_Base,
 	EntityType_Count,
 };
 
 struct EntityInfo {
-	// the id number is implicit, it's just the index into array
-	EntityType type;
 	int32 generation;
 	int32 indexInBuffer;
+
+	EntityType type;
+};
+
+struct EntityHandle {
+	EntityType type;
+	int32 id;
+	int32 generation;
 };
 
 struct EntityTypeBuffer {
 	int32 count;
-	int32 entitySize;
+	int32 entitySizeByte;
 	int32 capacity;
+
 	void* entities;
 };
 
 struct EntityManager {
 	int32 entityCapacity;
-	int32 count;
+	int32 nextID;
 	EntityInfo* entities;
 
 	EntityTypeBuffer buffers[EntityType_Count];
 };
 
-struct EntityHandle {
-	int32 id;
-	int32 generation;
-	
-	EntityType type;
-};
-
-struct MyData {
-	EntityManager em;
-};
 
 struct Entity {
 	vec2 position;
 	Sprite* sprite;
+
 	EntityHandle handle;
 };
 
-struct Player: Entity {
-	//Entity entity;
-	//int32 index;
-	//vec2 position;
-	int32 hitPoints;
-	
+struct Player : Entity {
+	real32 speed;
 };
 
 struct Enemy : Entity {
 
 };
 
-struct FreeList {
-	int32 generation;
-	int32 count;
-};
+struct MyData {
+	EntityManager em;
 
-int32 freeList_Enemy[1000];
-int32 freeListEnemy_Count = 0;
+	Sprite playerSprite;
+	Sprite enemySprite;
+};
 
 MyData* Data = NULL;
 
-void* GetEntity(EntityManager* em, EntityHandle handle) {
-	//EntityInfo* info = GetEntityInfo(em, handle);
+int32 freeList[100];
+int32 freeListCount = 0;
+
+
+void DeleteEntity(EntityManager* em, EntityHandle handle) {
+	
+
+	freeList[freeListCount] = handle.id;
+	freeListCount++;
+
+	EntityTypeBuffer* buffer = &em->buffers[handle.type];
 
 	EntityInfo* info = &em->entities[handle.id];
+
+	Entity* e = (Entity*)buffer->entities;
 	
+	e[info->indexInBuffer] = e[buffer->count - 1];
+
+	buffer->count--;
+}
+
+
+EntityHandle AddEntity(EntityManager* em, EntityType type) {
+	
+	// NEED TO DO FREELIST HERE
+	// calculate which index is coming up next that is free
+	int32 nextFreeIndex = em->nextID;
+	//		check to see if there are any free values that we can utilize
+	//		these will only arrise when we have deleted some entity
+	if (freeListCount > 0) {
+		nextFreeIndex = freeList[freeListCount - 1];
+		freeListCount--;
+	}
+
+	// Create handle for function's return and to be placed into the Entity within the buffer
+	EntityHandle handle = {};
+	
+	// Find a new ID to add that will create a new EntityInfo
+	EntityInfo* info = &em->entities[nextFreeIndex];
+	
+	// Add the type we are adding to the info's type
+	info->type = type;
+
+	// Fetch the Buffer using the type which contains our entities for each entity type
+	EntityTypeBuffer* buffer = &em->buffers[type];
+
+	// use the next count that is available in that buffer for the info that is being used
+	info->indexInBuffer = buffer->count;
+
+	// increase the buffer's count
+	buffer->count++;
+	em->nextID++;
+
+	// generate the handle
+	// Add the Generation from info to the handle ???
+	handle.generation = info->generation;
+	// Add the buffer's nextID to the handle
+	handle.id = nextFreeIndex;
+	// add the type to the handle
+	handle.type = type;
+	/*
+	// get the entity buffer allocated with the handle
+	Entity* e = (Entity *)buffer->entities;
+	e[info->indexInBuffer].handle = handle;
+	//ffer.entities[nextFreeIndex].handle = handle;
+	*/
+	return handle;
+
+}
+
+void *GetEntity(EntityManager* em, EntityHandle handle) {
+	// use the HANDLE to find the entity INFO
+	
+	// make sure there are sufficent entity capacities avaialable
+	if (handle.id >= em->entityCapacity) {
+		return NULL;
+	}
+
+	//use the handle to retrive the info
+	EntityInfo* info = &em->entities[handle.id];
+
+	// make sure that the generation's match
 	if (info->generation != handle.generation) {
 		return NULL;
 	}
-	/*
-	if (info->type != handle.type) {
-		return NULL;
-	}*/
-	//return info;
+
+
+	//retrieve the buffer that we are looking for by type
 	EntityTypeBuffer* buffer = &em->buffers[info->type];
-	return ((u8*)buffer->entities + (buffer->entitySize * info->indexInBuffer));
+	// find the place for that specific buffer in the memory using the index in the buffer that is in the EntityInfo
+	return ((u8*)buffer->entities + (buffer->entitySizeByte * info->indexInBuffer));
+	
 }
 
-void DeleteEntity(EntityManager* em, EntityType type, int32 indexToRemove) {
-	EntityHandle handle = {};
+void InitializeEntityManager() {
 
-	freeList_Enemy[freeListEnemy_Count] = indexToRemove;
-	freeListEnemy_Count++;
+	// Step 1: SET UP ENTITY MANAGER
+	Data->em.entityCapacity = 200;
+	// allocate memory for EntityManger
+	// the structure of entities is based on the EntityInfo structure
+	Data->em.entities = (EntityInfo*)malloc(sizeof(EntityInfo) * Data->em.entityCapacity);
+	// initialize to zero ???
+	memset(Data->em.entities, 0, sizeof(EntityInfo) * Data->em.entityCapacity);
+	// Step 1: Set our NextID counter to 0;
+	Data->em.nextID = 0;
 
-	EntityInfo* info = &em->entities[indexToRemove];
-	//info->type = type;
-	//info->
+	// Step 2: CREATE PLAYER BUFFER
+	EntityTypeBuffer* playerBuffer = &Data->em.buffers[EntityType_Player];
+	// Determine the size of the Entity
+	playerBuffer->entitySizeByte = sizeof(Player);
+	// How many can be stored in here (will use for allocation below)
+	playerBuffer->capacity = 10;
+	// Set the counter equal to 0 so it starts at the beginning
+	playerBuffer->count = 0;
+	// Allocate the memory for the entities within the buffer 
+	playerBuffer->entities = malloc(playerBuffer->entitySizeByte * playerBuffer->capacity);
+	memset(playerBuffer->entities, 0, sizeof(EntityTypeBuffer) * playerBuffer->capacity);
 
-	EntityTypeBuffer* buffer = &em->buffers[type];
-	//
-	info->indexInBuffer = buffer->count;
+	// Step 3: CREATE BASE BUFFER
 
-	em->count--;
+	
+	// Step 4: CREATE ENEMY BUFFER
+	EntityTypeBuffer* enemyBuffer = &Data->em.buffers[EntityType_Enemy];
+	// Determine the size of the Entity
+	enemyBuffer->entitySizeByte = sizeof(Enemy);
+	// How many can be stored in here (will use for allocation below)
+	enemyBuffer->capacity = 100;
+	// Set the counter equal to 0 so it starts at the beginning
+	enemyBuffer->count = 0;
+	// Allocate the memory for the entities within the buffer
+	enemyBuffer->entities = malloc(enemyBuffer->entitySizeByte * enemyBuffer->capacity);
+	//memset(playerBuffer->entities, 0, sizeof(EntityTypeBuffer) * playerBuffer->capacity);
+	memset(enemyBuffer->entities, 0, sizeof(EntityTypeBuffer) * enemyBuffer->capacity);
+	
+
+
+	
 }
 
-EntityHandle AddEntity(EntityManager* em, EntityType type) {
-	EntityHandle handle = {};
+void LoadSprites() {
+	LoadSprite(&Data->playerSprite, "data/galaga_ship.png");
+	LoadSprite(&Data->enemySprite, "data/player_guy.png");
+}
 
-	int32 nextFreeIndex = em->count;
 
-	if (freeListEnemy_Count > 0) {
-		nextFreeIndex = freeList_Enemy[freeListEnemy_Count - 1];
-		freeListEnemy_Count--;
+void PlayerInputMove(Player* p) {
+	if (InputHeld(Input, Input_Up)) {
+		p->position.y += p->speed * Game->deltaTime;
 	}
-	freeListEnemy_Count++;
-
-	EntityInfo* info = &em->entities[nextFreeIndex];
-	info->type = type;
-
-	EntityTypeBuffer* buffer = &em->buffers[type];
-	info->indexInBuffer = buffer->count;
-
-	buffer->count++;
-
-	handle.id = nextFreeIndex;
-	handle.generation = info->generation;
-
-	em->count++;
-
-	return handle;
+	if (InputHeld(Input, Input_Down)) {
+		p->position.y -= p->speed * Game->deltaTime;
+	}
+	if (InputHeld(Input, Input_Left)) {
+		p->position.x -= p->speed * Game->deltaTime;
+	}
+	if (InputHeld(Input, Input_Right)) {
+		p->position.x += p->speed * Game->deltaTime;
+	}
 }
-	// ...
-	// See if the freelist has anything in it, if so remove the last item (this is known as a PopBack) then we can reuse that ID. Otherwise add to the entity info.
-	// Now we must add an entityInfo and set it up
-
-
 
 void MyInit() {
 	Game->myData = malloc(sizeof(MyData));
@@ -139,283 +229,80 @@ void MyInit() {
 
 	Data = (MyData*)Game->myData;
 
-	Data->em.entityCapacity = 20000;
-	Data->em.entities = (EntityInfo*)malloc(sizeof(EntityInfo) * Data->em.entityCapacity);
-	memset(Data->em.entities, 0, sizeof(EntityInfo) * Data->em.entityCapacity);
+	LoadSprites();
 
-	Data->em.count = 0;
+	// Step 1: Initialize Entity Manager 
+	InitializeEntityManager();
 
-	EntityTypeBuffer* baseBuffer = &Data->em.buffers[EntityType_Base];
-
-	baseBuffer->entitySize = sizeof(Entity);
-	baseBuffer->capacity = 1000;
-	baseBuffer->count = 0;
-	baseBuffer->entities = malloc(baseBuffer->entitySize * baseBuffer->capacity);
-
-	EntityTypeBuffer* playerBuffer = &Data->em.buffers[EntityType_Player];
-	playerBuffer->entitySize = sizeof(Player);
-	playerBuffer->capacity = 200;
-	playerBuffer->count = 0;
-	playerBuffer->entities = malloc(playerBuffer->entitySize * playerBuffer->capacity);
-
+	// Step 2: ADD PLAYER ENTITY
 	EntityHandle playerHandle = AddEntity(&Data->em, EntityType_Player);
+	
+	// Step 3: GET PLAYER ENTITY
+	Player* p = (Player *)GetEntity(&Data->em, playerHandle);
+	// set player entity values
+	p->position = V2(0, 0);
+	p->speed = 2;
+	p->sprite = &Data->playerSprite;
 
-	Player* p = (Player*)GetEntity(&Data->em, playerHandle);
 
-	p->position = V2(2, 2);
-	p->handle = playerHandle;
-	p->sprite = (Sprite*)malloc(sizeof(Sprite));
-	LoadSprite(p->sprite, "data/player_guy.png");
-
-	EntityTypeBuffer* enemyBuffer = &Data->em.buffers[EntityType_Enemy];
-	enemyBuffer->entitySize = sizeof(Enemy);
-	enemyBuffer->capacity = 100000;
-	enemyBuffer->count = 0;
-	enemyBuffer->entities = malloc(enemyBuffer->entitySize * enemyBuffer->capacity);
+	// Step 4: Test Deletion of Enemy
 
 	for (int i = 0; i < 8; i++) {
 		EntityHandle enemyHandle = AddEntity(&Data->em, EntityType_Enemy);
 		Enemy* e = (Enemy*)GetEntity(&Data->em, enemyHandle);
-		e->position = V2(4 - (2*i), -3 + i);
-		e->handle = enemyHandle;
-		e->sprite = (Sprite*)malloc(sizeof(Sprite));
-		LoadSprite(e->sprite, "data/player_bolt.png");
+		e->position = V2(1, i);
+		e->sprite = &Data->enemySprite;
 	}
+
 }
+
+
 
 void MyGameUpdate() {
-	// LOGIC
 	
+	// LOGIC
+
+	//		PLAYER LOGIC
 	EntityTypeBuffer* playerBuffer = &Data->em.buffers[EntityType_Player];
 	int32 numOfPlayers = playerBuffer->count;
+	Player* p = (Player*)playerBuffer->entities;
+	PlayerInputMove(p);
+	//MouseDirection();
+
+	//		ENEMY LOGIC
 	EntityTypeBuffer* enemyBuffer = &Data->em.buffers[EntityType_Enemy];
 	int32 numOfEnemies = enemyBuffer->count;
+	Enemy* e = (Enemy*)enemyBuffer->entities;
 
-	for (int i = 0; i < numOfPlayers; i++) {
-		Player* p = (Player *)playerBuffer[i].entities;
-		
-		// MOVE PLAYER INPUT DETECTION
-		if (InputPressed(Input, Input_Up)) {
-			p->position.y++;
-		}
-		if (InputPressed(Input, Input_Down)) {
-			p->position.y--;
-		}
-		if (InputPressed(Input, Input_Right)) {
-			p->position.x++;
-		}
-		if (InputPressed(Input, Input_Left)) {
-			p->position.x--;
-		}
-	}
 
 	if (InputPressed(Input, Input_Space)) {
-		DeleteEntity(&Data->em, EntityType_Enemy, 6);
+		EntityHandle enemyHandle;
+		enemyHandle.id = 1;
+		enemyHandle.type = EntityType_Enemy;
+		DeleteEntity(&Data->em, enemyHandle);
 	}
-
-	// RENDER
-	ClearColor(RGB(0.4f, 0.0f, 0.0f));
-		//	Player
-	for (int i = 0; i < numOfPlayers; i++) {
-		Player* p = (Player*)playerBuffer->entities;
-		DrawSprite(p[i].position, V2(0.3f, 0.3f), p[i].sprite);
-	}
-		//	Enemy
-	for (int i = 0; i < 8; i++) {
-		Enemy* e = (Enemy*)enemyBuffer->entities;
-		DrawSprite(e[i].position, V2(0.3f, 0.3f), e[i].sprite);
-	}
-}
-	//EntityHandle playerHandle = Data->em.buffers[EntityType_Player].handle;
-		//EntityHandle playerHandle = &Data->em.buffers
-		//Player* p = &Data->em.
-		// LOGICData->em.buffers[EntityType_Player].entities
-	//int32 numOfPlayers = sizeof(Data->em.buffers[EntityType_Player].entities);
-	
-	//for (int i = 0; i < Data->em.buffers[EntityType_Player].entities; )
-	//Player* p = .han;
-	//Player* p = NULL;
-	
-	/*
-	for (int i = 0; i < 1; i++) {
-		p = (Player *) &Data->em.buffers[i].entities;
-		//p->position.y = 4;
-	}
-	*/
-/*
-	if (InputPressed(Input, Input_Up)) {
+	if (InputPressed(Input, Input_UpArrow)) {
 		EntityHandle enemyHandle = AddEntity(&Data->em, EntityType_Enemy);
 		Enemy* e = (Enemy*)GetEntity(&Data->em, enemyHandle);
-		e->position.x = posE;
-		posE++;
-		e->sprite = (Sprite*)malloc(sizeof(Sprite));
-		LoadSprite(e->sprite, "data/player_bolt.png");
+		e->position = V2(1, 4);
+		e->sprite = &Data->enemySprite;
 	}
 
 	// RENDER
 	ClearColor(RGB(0.4f, 0.0f, 0.0f));
-	//DrawSprite(p->position, V2(0.3f, 0.3f), p->sprite);
 
-	for (int i = 0; i < posE; i++) {
-		//E
-		//Enemy* e = (Enemy *)Data->em.buffers[i].entities;
-		//Enemy *e = (Enemy *)Get
-		//DrawSprite(e->position, V2(0.3f, 0.3f), e->sprite);
+	//		RENDER BASE
+
+	//		RENDER PLAYER
+	for (int i = 0; i < numOfPlayers; i++) {
+		DrawSprite(p[i].position, V2(1, 1), p[i].sprite);
 	}
-	*/
 
-
-	/*
-	EntityTypeBuffer* playerBuffer = &Data->em.buffers[EntityType_Player];
-
-	playerBuffer->entitySize = sizeof(Player);
-	playerBuffer->capacity = 4;
-	playerBuffer->count = 0;
-	playerBuffer->entities = malloc(playerBuffer->entitySize * playerBuffer->capacity);
-
-
-	playerBuffer->count = AddEntity(EntityType_Player, playerBuffer->entities);
-	//MyData* data2 = Data;
-	Player* p = (Player*)GetEntity(EntityType_Player, 0);
-	p->position.x = 3;
-	p->position.y = 1;
-	p->index = 0;
-	p->hitPoints = 10;
-	p->sprite = (Sprite *)malloc(sizeof(Sprite));
-
-	LoadSprite(p->sprite, "data/galaga_ship.png");
-	*/
-
-/*
-	p->index = 0;
-	p->position.x = 3;
-	p->position.y = 4;
-	
-	*/
-
-	//Data->em.buffers[EntityType_Player].entities = 
-	// 
-	// Player* p = (Player*)Data->em.buffers[EntityType_Player].entities;
-//
-//Player *p;
-
-//p->position.x = 8;
-//LoadSprite(p->sprite, "data/player_guy.png");
-//Data->em.buffers[EntityType_Player].entities = p;
-	/*
-	Player* p3 = (Player*)Data->em.buffers[EntityType_Player].entities;
-	p3->index = 0;
-	p3->position.x = 3;
-	p3->position.y = 4;
-	p3->hitPoints = 10;
-	//p3->sprite = 
-	*/
-	//LoadSprite(&Data->sprite, "data/player_guy.png");
-	//Data->em.buffers[EntityType_Player].entities = malloc(sizeof(Player) * 1);
-	//p->position.y = 3;
-	//LoadSprite(&Data->sprite, "data/galaga_ship.png");
-	//OpenGL_InitTexture(&Data->sprite);
-	//LoadSprite(p->sprite, "data/player_guy.png");
-	//OpenGL_InitTexture(p3->sprite);
-	//LoadSprite(playerBuffer->entities[playerBuffer->count], "data/player_guy.png");
-	//Data->em
-	/*
-	em = (EntityManager*)Game->myData;
-	memset(Game->myData, 0, sizeof(MyData));
-
-	em->buffers[EntityType_Player].entities = (Player *)malloc(sizeof(Player) * 1);
-	//memset(em->buffers, 0, sizeof(Player));
-	
-	p->index = AddEntity(EntityType_Player, em);
-	//em->buffers[EntityType_Player].
-	p = (Player*)em->buffers[EntityType_Player].entities;
-	p->position.x = 8;
-	
-	//p2->size.x = 0.3f;
-	//p2->size.y = 0.3f;
-
-	*/
-	//Player *p3 = Data->em.buffers[EntityType_Player].entities[]
-	//Player* p3 = (Player*)Data->em.buffers[EntityType_Player].entities;
-	//LoadSprite(p3->sprite, "data/player_guy.png");
-	//Player* p = (Player*)GetEntity(EntityType_Player, 0);
-	// LOGIC
-    //	EntityTypeBuffer* playerBuffer = &Data->em.buffers[EntityType_Player];
-		//Player *p3 = (Player*)&Data->em.buffers[EntityType_Player].entities;
-		// 
-	//Data = (MyData*)Game->myData;
-	//Data->em.buffers[EntityType_Player];
-	//EntityTypeBuffer* buffer = &em->buffers[info->type];
-
-	//EntityTypeBuffer* playerBuffer1 = &Data->em.buffers[0];
-	//Player* p4 = (Player *) playerBuffer1[0].entities;
-	//Player *p3 = (Player*)&Data->em.b;
-	//p3[0];
-	
-/*
-	if (InputPressed(Input, Input_Up)) {
-		p->position.y++;
+	//		RENDER ENEMY
+	for (int i = 0; i < numOfEnemies; i++) {
+		DrawSprite(e[i].position, V2(0.1f, 0.1f), e[i].sprite);
 	}
-	if (InputPressed(Input, Input_Down)) {
-		p->position.y--;
-	}
-	
 
-	if (InputPressed(Input, Input_Right)) {
-		p->position.x++;
-	}
-	
-	if (InputPressed(Input, Input_Left)) {
-		p->position.x--;
-	}
-	
-	// RENDER
-	//GetEntity(EntityType_Player, p.index);
-	
-	ClearColor(RGB(0.4f, 0.0f, 0.0f));
-	DrawSprite(p->position, V2(0.3f, 0.3f), p->sprite);
+
+
 }
-*/
-
-
-/*
-void* GetEntity(EntityManager* em, EntityHandle handle) {
-}
-*/
-/*
-EntityInfo* info = &em->entities[handle.id];
-//return info;
-//
-EntityTypeBuffer *buffer = &em->buffers[info->type];
-return buffer->entities + (buffer->entitySizeInBytes * info->indexInBuffer);
-// use the ID to look up the entity info, then use the info
-// to look up our buffer and data
-*/
-
-/*
-int32 AddEntity(EntityType type, void* data) {
-	// Look up the buffer in type
-	//if (type)
-	EntityTypeBuffer* buffer = &Data->em.buffers[type];
-	// count tells us where in the buffer we should add our data
-	int32 currentCount = buffer->count;
-	// copy data into buffer
-	buffer[currentCount].entities = data;
-	// increment count
-	int32 index;
-	index = buffer->count++;
-	// return index to our data in the buffer
-	index = buffer->count;
-	return index;
-}
-*/
-
-/*
-void *GetEntity(EntityType type, int32 index) {
-	EntityTypeBuffer* buffer = &Data->em.buffers[type];
-	//buffer[ind]
-	// look up the buffer using type then use the index into data
-	//buffer[index];
-	return buffer[index].entities;
-}
-*/
