@@ -284,7 +284,7 @@ void MyGameUpdate() {
 	if (InputPressed(Input, Input_UpArrow)) {
 		EntityHandle enemyHandle = AddEntity(&Data->em, EntityType_Enemy);
 		Enemy* e = (Enemy*)GetEntity(&Data->em, enemyHandle);
-		e->position = V2(1, 4);
+		e->position = V2(1, 2);
 		e->sprite = &Data->enemySprite;
 	}
 
